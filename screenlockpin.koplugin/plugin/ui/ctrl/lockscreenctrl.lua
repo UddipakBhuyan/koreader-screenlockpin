@@ -4,6 +4,7 @@ local Device = require("device")
 local ffiutil = require("ffi/util")
 local PluginShare = require("pluginshare")
 local ReaderUI = require("apps/reader/readerui")
+local Event = require("ui/event")
 local UIManager = require("ui/uimanager")
 local Screensaver = require("ui/screensaver")
 local InfoMessage = require("ui/widget/infomessage")
@@ -60,14 +61,17 @@ local function formatAttempts()
     return str
 end
 
-local function teardownScreensaverOrLockscreen()
+local function teardownScreensaverOrLockscreen(keep_overlay)
     logger.dbg("ScreenLockPin: screensaver / lockscreen teardown")
     screensaverUtil.unfreezeScreensaverAbi()
     -- decide upon refresh type depending on if we unlock to reader UI
     local hasReaderUi = uiManagerUtil.findTopMostWidget(function(widget)
         return getmetatable(widget).__index == ReaderUI
     end) ~= nil
-    if hasReaderUi then
+    if keep_overlay then
+        logger.dbg("ScreenLockPin: deferring overlay close")
+        screensaverUtil.totalCleanup()
+    elseif hasReaderUi then
         logger.dbg("ScreenLockPin: Reader detected; full refresh")
         screensaverUtil.totalCleanup()
         if overlay ~= nil then UIManager:close(overlay) end
@@ -82,26 +86,87 @@ local function teardownScreensaverOrLockscreen()
         end
     end
     screenshoterUtil.unfreezeScreenshoterAbi()
+    if keep_overlay then return end
     if overlay ~= nil then
         overlay:free()
         overlay = nil
     end
 end
 
-local function unlockScreen(cause)
+local function closeOverlay(refreshtype)
+    if overlay == nil then return end
+    UIManager:close(overlay, refreshtype)
+    overlay:free()
+    overlay = nil
+end
+
+--- The "Exit" event closes the reader asynchronously: tear the lock screen
+--- down only once it is gone, or the book page flashes.
+local function closeOverlayAfterReaderClosed(attempt)
+    attempt = (attempt or 0) + 1
+    if ReaderUI.instance ~= nil and attempt <= 50 then
+        UIManager:scheduleIn(0.1, closeOverlayAfterReaderClosed, attempt)
+        return
+    end
+    -- No refresh type: the Kindle UI repaints as soon as KOReader exits.
+    teardownScreensaverOrLockscreen()
+end
+
+local function completeUnlock(destination, keep_overlay)
+    if destination == "kindle_home" then
+        logger.dbg("ScreenLockPin: exit KOReader after unlock")
+        UIManager:broadcastEvent(Event:new("Exit"))
+        if keep_overlay then
+            closeOverlayAfterReaderClosed()
+        end
+        return
+    end
+    if destination == "koreader_home" and ReaderUI.instance then
+        logger.dbg("ScreenLockPin: close book and open file manager home after unlock")
+        local FileManager = require("apps/filemanager/filemanager")
+        ReaderUI.instance:onHome()
+        -- onHome() reopens the file browser in the book's folder; go HOME instead.
+        if FileManager.instance then
+            local home_dir = G_reader_settings:readSetting("home_dir") or Device.home_dir
+            if home_dir then
+                FileManager.instance.file_chooser:changeToPath(home_dir)
+            end
+        end
+    end
+    if keep_overlay then
+        teardownScreensaverOrLockscreen(true)
+        closeOverlay("full")
+    end
+    PluginShare.plugin_updater_v1.ping()
+end
+
+local function unlockScreen(cause, destination)
     if not overlay then return false end
     logger.dbg("ScreenLockPin: close lock screen (" .. cause .. ")")
-    teardownScreensaverOrLockscreen()
     local throttled_times = pluginSettings.readPersistentCache("throttled_times") or 0
+    -- Keep the lock screen up until the target UI is ready (no book-page flash).
+    local keep_overlay = (destination == "koreader_home" or destination == "kindle_home")
+        and ReaderUI.instance ~= nil
+        and throttled_times < 2
+    local function continueAfterUnlock()
+        UIManager:nextTick(function()
+            completeUnlock(destination, keep_overlay)
+        end)
+    end
+    if not keep_overlay then
+        teardownScreensaverOrLockscreen()
+    end
     if throttled_times >= 2 then
         UIManager:show(InfoMessage:new{
             text = T(_("Caution!\nHigh amount of failed PIN inputs detected.\n%1"), formatAttempts()),
             icon = "notice-warning",
+            dismiss_callback = continueAfterUnlock,
         })
         pluginSettings.putPersistentCache("throttled_times", 0)
         pluginSettings.putPersistentCache("attempts_by_length", nil)
+    else
+        continueAfterUnlock()
     end
-    UIManager:nextTick(PluginShare.plugin_updater_v1.ping)
     return true
 end
 
@@ -187,7 +252,7 @@ local function showOrClearLockScreen(cause)
         -- UIManager hook (called on ui root elements)
         onResume = onResume,
         -- LockScreenFrame
-        on_unlock = function () unlockScreen("valid_pin") end,
+        on_unlock = function (destination) unlockScreen("valid_pin", destination) end,
         on_notes_overlay = showNotesOverlay,
     }
     UIManager:show(overlay, "flashui", overlay:getRefreshRegion())
