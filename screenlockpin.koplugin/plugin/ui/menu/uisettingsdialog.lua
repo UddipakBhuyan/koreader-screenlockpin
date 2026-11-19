@@ -167,7 +167,7 @@ local UiSettingsDialog = ConfigDialog:extend {
             options = {
                 {
                     name = "unlock_home",
-                    name_text = _("Unlock: KOReader home"),
+                    name_text = _("Unlock to home"),
                     toggle = { C_("Unlock destinations", "off"), C_("Unlock destinations", "on") },
                     args = { "off", "on" },
                     values = { "off", "on" },
@@ -175,7 +175,7 @@ local UiSettingsDialog = ConfigDialog:extend {
                 },
                 {
                     name = "unlock_exit",
-                    name_text = _("Unlock: exit KOReader"),
+                    name_text = _("Unlock to exit"),
                     toggle = { C_("Unlock destinations", "off"), C_("Unlock destinations", "on") },
                     args = { "off", "on" },
                     values = { "off", "on" },
