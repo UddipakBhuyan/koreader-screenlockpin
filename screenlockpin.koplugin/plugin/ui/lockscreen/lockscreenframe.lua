@@ -2,6 +2,7 @@ local _ = require("gettext")
 local logger = require("logger")
 local Device = require("device")
 local Blitbuffer = require("ffi/blitbuffer")
+local Font = require("ui/font")
 local Size = require("ui/size")
 local Geom = require("ui/geometry")
 local UIManager = require("ui/uimanager")
@@ -12,6 +13,7 @@ local VerticalSpan = require("ui/widget/verticalspan")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local HorizontalSpan = require("ui/widget/horizontalspan")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
+local CheckButton = require("ui/widget/checkbutton")
 local IconButton = require("ui/widget/iconbutton")
 local Screen = Device.screen
 
@@ -26,6 +28,9 @@ local LockScreenFrame = InputContainer:extend {
     name = "SLPLockScreen",
 
     lock_widget = nil,
+    unlock_choice_buttons = nil,
+    unlock_choices = nil,
+    unlock_destination = nil,
     status_text = nil,
     bottom_row = nil,
     on_unlock = nil,
@@ -65,7 +70,7 @@ function LockScreenFrame:init()
                 return
             end
             logger.dbg("ScreenLockPin: unlock")
-            self.on_unlock()
+            self.on_unlock(self.unlock_destination)
         end
     }
     self.status_text = LockScreenStatusText:new {
@@ -80,6 +85,43 @@ function LockScreenFrame:init()
     local note_cfg = pluginSettings.getNoteSettings()
     local action_buttons = WidgetContainer:new {}
     local icon_padding = math.floor(Size.padding.large * (0.2 + scale))
+    local unlock_home = pluginSettings.getUnlockHome()
+    local unlock_exit = pluginSettings.getUnlockExit()
+    if unlock_home or unlock_exit then
+        local choice_face = Font:getFace("smallinfofont", math.floor(13 + scale * 7))
+        local function makeUnlockChoice(destination, text)
+            local button
+            button = CheckButton:new {
+                text = text,
+                checked = false,
+                parent = self,
+                show_parent = self,
+                width = self.lock_widget._width,
+                face = choice_face,
+                checkmark_face = choice_face,
+                callback = function()
+                    self:_onUnlockDestinationChoice(destination, button)
+                end,
+            }
+            return button
+        end
+        self.unlock_choice_buttons = {}
+        local unlock_items = {
+            VerticalSpan:new { width = icon_padding },
+        }
+        if unlock_home then
+            local button = makeUnlockChoice("koreader_home", _("Open KOReader home after unlock"))
+            self.unlock_choice_buttons.koreader_home = button
+            table.insert(unlock_items, button)
+        end
+        if unlock_exit then
+            local button = makeUnlockChoice("kindle_home", _("Open Kindle home and exit KOReader"))
+            self.unlock_choice_buttons.kindle_home = button
+            table.insert(unlock_items, button)
+        end
+        table.insert(unlock_items, VerticalSpan:new { width = icon_padding })
+        self.unlock_choices = VerticalGroup:new(unlock_items)
+    end
     if note_cfg.mode == "button" then
         local icon_size = math.floor(Size.item.height_big * (0.75 + scale))
         table.insert(action_buttons, IconButton:new {
@@ -114,7 +156,12 @@ function LockScreenFrame:init()
     self.outside_input = OutsideAreaInput:new {
         content_region = nil,
     }
-    self.lockpanel_vgroup = VerticalGroup:new { self.lock_widget, self.bottom_row }
+    local panel_items = { self.lock_widget }
+    if self.unlock_choices then
+        table.insert(panel_items, self.unlock_choices)
+    end
+    table.insert(panel_items, self.bottom_row)
+    self.lockpanel_vgroup = VerticalGroup:new(panel_items)
     self.vgroup = VerticalGroup:new { }
 
     local lockframe = FrameContainer:new {
@@ -161,6 +208,41 @@ end
 
 function LockScreenFrame:onKbdDel(_, evt)
     self.lock_widget.state:delInput(evt.Ctrl or evt.Shift)
+end
+
+function LockScreenFrame:_onUnlockDestinationChoice(destination, selected_button)
+    if selected_button.checked then
+        self.unlock_destination = destination
+        for other_destination, button in pairs(self.unlock_choice_buttons) do
+            if other_destination ~= destination and button.checked then
+                button:toggleCheck()
+            end
+        end
+    elseif self.unlock_destination == destination then
+        self.unlock_destination = nil
+    end
+end
+
+function LockScreenFrame:_resetUnlockDestination()
+    self.unlock_destination = nil
+    if not self.unlock_choices then return end
+    for _, button in pairs(self.unlock_choice_buttons) do
+        if button.checked then
+            button:free()
+            button:initCheckButton(false)
+        end
+    end
+    self.unlock_choices:resetLayout()
+end
+
+function LockScreenFrame:_resizeUnlockChoices(width)
+    if not self.unlock_choices then return end
+    for _, button in pairs(self.unlock_choice_buttons) do
+        button:free()
+        button.width = width
+        button:initCheckButton(button.checked)
+    end
+    self.unlock_choices:resetLayout()
 end
 
 function LockScreenFrame:_resetStatusTextLayout()
@@ -230,12 +312,14 @@ end
 function LockScreenFrame:clearInput()
     logger.dbg("ScreenLockPin: clear overlay input")
     self.lock_widget.state:clear()
+    self:_resetUnlockDestination()
 end
 
 function LockScreenFrame:relayout(refreshmode)
     local screen_dimen = Geom:new{x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight()}
     logger.dbg("ScreenLockPin: resize overlay (screen: " .. screen_dimen.w .. "x" .. screen_dimen.h .. ")")
     self.lock_widget:onScreenResize(screen_dimen)
+    self:_resizeUnlockChoices(self.lock_widget._width)
     self.bottom_row:setWidth(self.lock_widget._width)
     if self.notes_always ~= nil then self.notes_always:setWidth(self.lock_widget._width) end
     self.outside_input.screen_mid = screen_dimen.h / 2
