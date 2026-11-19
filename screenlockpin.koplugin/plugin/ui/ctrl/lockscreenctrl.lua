@@ -69,9 +69,6 @@ local function teardownScreensaverOrLockscreen(keep_overlay)
         return getmetatable(widget).__index == ReaderUI
     end) ~= nil
     if keep_overlay then
-        -- Keep the lock screen on top while the UI below is swapped; the
-        -- caller closes it once the target UI is ready, so the reader page
-        -- never becomes visible in between.
         logger.dbg("ScreenLockPin: deferring overlay close")
         screensaverUtil.totalCleanup()
     elseif hasReaderUi then
@@ -103,11 +100,8 @@ local function closeOverlay(refreshtype)
     overlay = nil
 end
 
---- Close the lock screen only once the reader is gone. Used when exiting
---- KOReader: the exit handler closes the reader asynchronously, and tearing
---- the lock screen down before that would briefly reveal the book page.
---- The lock screen's backdrop is kept until the very end as well, otherwise
---- the book becomes visible around the small PIN panel while exiting.
+--- The "Exit" event closes the reader asynchronously: tear the lock screen
+--- down only once it is gone, or the book page flashes.
 local function closeOverlayAfterReaderClosed(attempt)
     attempt = (attempt or 0) + 1
     if ReaderUI.instance ~= nil and attempt <= 50 then
@@ -131,8 +125,7 @@ local function completeUnlock(destination, keep_overlay)
         logger.dbg("ScreenLockPin: close book and open file manager home after unlock")
         local FileManager = require("apps/filemanager/filemanager")
         ReaderUI.instance:onHome()
-        -- ReaderUI:onHome() only closes the book and reopens the file browser
-        -- in the book's folder. Jump to the HOME folder instead.
+        -- onHome() reopens the file browser in the book's folder; go HOME instead.
         if FileManager.instance then
             local home_dir = G_reader_settings:readSetting("home_dir") or Device.home_dir
             if home_dir then
@@ -141,8 +134,6 @@ local function completeUnlock(destination, keep_overlay)
         end
     end
     if keep_overlay then
-        -- Drop the lock screen and its backdrop, then reveal the target UI
-        -- with a single full refresh.
         teardownScreensaverOrLockscreen(true)
         closeOverlay("full")
     end
@@ -153,8 +144,7 @@ local function unlockScreen(cause, destination)
     if not overlay then return false end
     logger.dbg("ScreenLockPin: close lock screen (" .. cause .. ")")
     local throttled_times = pluginSettings.readPersistentCache("throttled_times") or 0
-    -- When switching to another UI, keep the lock screen up until that UI is
-    -- ready, otherwise the reader page becomes visible in between.
+    -- Keep the lock screen up until the target UI is ready (no book-page flash).
     local keep_overlay = (destination == "koreader_home" or destination == "kindle_home")
         and ReaderUI.instance ~= nil
         and throttled_times < 2
