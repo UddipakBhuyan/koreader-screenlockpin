@@ -25,6 +25,7 @@ and more…
 - 🎯 **Customizable layout** — can be configured for single-handed use
 - 🔆 **Frontlight control** — easily turn on the screen light in a dark environment
 - 🪃 **Lightweight design** — optimized for performance
+- 🏠 **Unlock destinations** — optionally continue reading, close the book, or exit KOReader
 - 🗽 **PIN length** — 3 to 12 digits
 - ⏱️ **Deferred locking** — bypass lockscreen for short sleep periods
 
@@ -59,6 +60,15 @@ unlocking the KOReader, in case you forget the PIN (see FAQ below).
 
 Actions for the dispatcher (e.g., Gesture manager) can be found in the *Device*
 group.
+
+On the lock screen, you can optionally select **Open KOReader home after unlock**
+to close the current book, or **Open Kindle home and exit KOReader** to leave
+KOReader after entering the correct PIN. The choices are mutually exclusive and
+reset the next time the lock screen opens.
+
+Each choice is disabled by default to keep the lock screen minimal. Enable
+either or both in *Screen › Lock screen › Lock screen options*: **Unlock to
+home** and **Unlock to exit**.
 
 ### Frontlight Control
 

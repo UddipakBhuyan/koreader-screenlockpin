@@ -37,6 +37,8 @@ local pluginSettingsKeys = {
     "screenlockpin_update_reminder_interval",
     "screenlockpin_short_suspend_threshold",
     "screenlockpin_disable_next",
+    "screenlockpin_unlock_home",
+    "screenlockpin_unlock_exit",
 
     "plugin_updater#screenlockpin:checked_at",
     "plugin_updater#screenlockpin:dismissed_at",
@@ -124,6 +126,12 @@ local function mergeDefaultSettings()
     end
     if G_reader_settings:hasNot("screenlockpin_disable_next") then
         G_reader_settings:makeFalse("screenlockpin_disable_next")
+    end
+    if G_reader_settings:hasNot("screenlockpin_unlock_home") then
+        G_reader_settings:saveSetting("screenlockpin_unlock_home", "off")
+    end
+    if G_reader_settings:hasNot("screenlockpin_unlock_exit") then
+        G_reader_settings:saveSetting("screenlockpin_unlock_exit", "off")
     end
 end
 
@@ -284,6 +292,26 @@ end
 
 local function setFrontlightMode(mode)
     G_reader_settings:saveSetting("screenlockpin_frontlight_mode", mode)
+end
+
+--
+-- Unlock Destinations
+--
+
+local function getUnlockHome()
+    return G_reader_settings:readSetting("screenlockpin_unlock_home") == "on"
+end
+
+local function setUnlockHome(bool)
+    G_reader_settings:saveSetting("screenlockpin_unlock_home", bool and "on" or "off")
+end
+
+local function getUnlockExit()
+    return G_reader_settings:readSetting("screenlockpin_unlock_exit") == "on"
+end
+
+local function setUnlockExit(bool)
+    G_reader_settings:saveSetting("screenlockpin_unlock_exit", bool and "on" or "off")
 end
 
 --
@@ -469,6 +497,11 @@ return {
 
     getFrontlightMode = getFrontlightMode,
     setFrontlightMode = setFrontlightMode,
+
+    getUnlockHome = getUnlockHome,
+    setUnlockHome = setUnlockHome,
+    getUnlockExit = getUnlockExit,
+    setUnlockExit = setUnlockExit,
 
     readPin = readPin,
     setPin = setPin,

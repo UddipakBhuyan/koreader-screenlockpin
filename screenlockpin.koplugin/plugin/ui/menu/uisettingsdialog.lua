@@ -166,6 +166,22 @@ local UiSettingsDialog = ConfigDialog:extend {
             icon = "appbar.settings",
             options = {
                 {
+                    name = "unlock_home",
+                    name_text = _("Unlock to home"),
+                    toggle = { C_("Unlock destinations", "off"), C_("Unlock destinations", "on") },
+                    args = { "off", "on" },
+                    values = { "off", "on" },
+                    event = "SetUnlockHome",
+                },
+                {
+                    name = "unlock_exit",
+                    name_text = _("Unlock to exit"),
+                    toggle = { C_("Unlock destinations", "off"), C_("Unlock destinations", "on") },
+                    args = { "off", "on" },
+                    values = { "off", "on" },
+                    event = "SetUnlockExit",
+                },
+                {
                     name = "screenshots_mode",
                     name_text = _("Screenshots"),
                     toggle = { C_("Lock screen screenshots", "prevent"), C_("Lock screen screenshots", "allow") },
@@ -258,6 +274,8 @@ function UiSettingsDialog:init()
         button_feedback_mode = pluginSettings.getButtonFeedback(),
         screenshots_mode = prevent_screenshots and "prevent" or "allow",
         frontlight_mode = pluginSettings.getFrontlightMode(),
+        unlock_home = pluginSettings.getUnlockHome() and "on" or "off",
+        unlock_exit = pluginSettings.getUnlockExit() and "on" or "off",
         check_update_interval = pluginSettings.getCheckUpdateInterval(),
         update_reminder_interval = pluginSettings.getUpdateReminderInterval(),
         short_suspend_threshold = pluginSettings.getShortSuspendThreshold(),
@@ -418,6 +436,18 @@ end
 function UiSettingsDialog:onSetFrontlightMode(mode)
     pluginSettings.setFrontlightMode(mode)
     self.configurable.frontlight_mode = mode
+    return true
+end
+
+function UiSettingsDialog:onSetUnlockHome(value)
+    pluginSettings.setUnlockHome(value == "on")
+    self.configurable.unlock_home = value
+    return true
+end
+
+function UiSettingsDialog:onSetUnlockExit(value)
+    pluginSettings.setUnlockExit(value == "on")
+    self.configurable.unlock_exit = value
     return true
 end
 
